@@ -1,79 +1,85 @@
-name: Build iOS App
+name: Build Student Behavior App
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'main.py'
-      - 'requirements.txt'
-      - '.github/workflows/**'
 
 jobs:
   build-ios:
-    runs-on: macos-14
-    env:
-      APP_NAME: "StudentBehavior"
-      
+    runs-on: macos-latest
+    
     steps:
-      # 1. تحميل الكود
-      - name: 📥 تحميل المشروع
-        uses: actions/checkout@v4
+    - name: 📥 Checkout code
+      uses: actions/checkout@v3
       
-      # 2. إعداد Python
-      - name: 🐍 إعداد Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      
-      # 3. تثبيت المكتبات
-      - name: 📦 تثبيت المتطلبات
-        run: |
-          pip install -r requirements.txt
-      
-      # 4. إعداد Flutter
-      - name: 🚀 إعداد Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.22.0'
-          channel: 'stable'
-      
-      # 5. تثبيت CocoaPods
-      - name: 📱 تثبيت CocoaPods
-        run: |
-          sudo gem install cocoapods
-          pod setup
-      
-      # 6. بناء تطبيق iOS
-      - name: 🔨 بناء تطبيق iOS
-        run: |
-          flet build ipa . \
-            --project "$APP_NAME" \
-            --org "com.education" \
-            --ios-language "ar" \
-            --ios-country "SA" \
-            --verbose
-      
-      # 7. إصلاح الشاشة البيضاء
-      - name: ⚡ إصلاح iOS
-        run: |
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: 📦 Install Python packages
+      run: |
+        pip install flet==0.22.1
+        pip install openpyxl==3.1.2
+        pip install et-xmlfile==1.1.0
+        
+    - name: 🚀 Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.22.0'
+        
+    - name: 🔨 Build Flet iOS App
+      run: |
+        # أولاً: إنشاء تطبيق Flet
+        flet create "StudentBehaviorApp" --template app
+        
+        # ثانياً: نسخ ملفاتنا للتطبيق
+        cp main.py StudentBehaviorApp/
+        cp requirements.txt StudentBehaviorApp/
+        
+        # ثالثاً: الدخول للمجلد والبناء
+        cd StudentBehaviorApp
+        
+        # رابعاً: بناء IPA (بدون إعدادات اللغة القديمة)
+        flet build ipa --project "StudentBehavior" --org "com.education"
+        
+    - name: 📱 Fix iOS Issues
+      run: |
+        cd StudentBehaviorApp
+        
+        # إصلاح الشاشة البيضاء
+        find . -name "Info.plist" -type f | while read PLIST; do
           # تعطيل Impeller
-          find . -name "Info.plist" | head -1 | while read plist; do
-            /usr/libexec/PlistBuddy -c "Add :FLTEnableImpeller bool false" "$plist"
-          done
-      
-      # 8. تجميع IPA
-      - name: 📦 تجميع IPA
-        run: |
-          mkdir -p Payload
-          find . -name "*.app" -type d | head -1 | while read app; do
-            cp -r "$app" Payload/
-            zip -qr "تطبيق_سلوكيات_الطلبة.ipa" Payload
-          done
-      
-      # 9. رفع الناتج
-      - name: ⬆️ رفع التطبيق
-        uses: actions/upload-artifact@v4
-        with:
-          name: تطبيق-iOS
-          path: "*.ipa"
+          /usr/libexec/PlistBuddy -c "Delete :FLTEnableImpeller" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :FLTEnableImpeller bool false" "$PLIST"
+          
+          # إضافة إعدادات اللغة
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string 'ar'" "$PLIST" 2>/dev/null || true
+          
+          echo "✅ Fixed: $PLIST"
+        done
+        
+    - name: 📦 Package IPA
+      run: |
+        cd StudentBehaviorApp
+        
+        # البحث عن IPA المولد
+        if [ -f "build/ios/ipa/*.ipa" ]; then
+          cp build/ios/ipa/*.ipa ../StudentBehavior.ipa
+        else
+          # إنشاء IPA يدوياً إذا فشل البناء
+          APP_PATH=$(find . -name "Runner.app" -type d | head -1)
+          if [ -n "$APP_PATH" ]; then
+            mkdir -p Payload
+            cp -r "$APP_PATH" Payload/
+            zip -qr ../StudentBehavior.ipa Payload
+          fi
+        fi
+        
+    - name: ⬆️ Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: iOS-App
+        path: |
+          StudentBehavior.ipa
+          StudentBehaviorApp/build/ios/ipa/*.ipa
+        retention-days: 7
