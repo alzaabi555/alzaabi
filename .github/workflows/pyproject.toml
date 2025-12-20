@@ -1,0 +1,20 @@
+[tool.briefcase]
+project_name = "AttendanceApp"
+bundle = "com.om.edu"
+version = "1.0.0"
+author = "Omani Educator"
+
+[tool.briefcase.app.attendanceapp]
+formal_name = "Student Attendance"
+description = "تطبيق رصد الحضور والسلوك"
+sources = ["src/attendanceapp"]
+requires = [
+    "toga-ios",
+    "pandas",
+    "openpyxl",
+    "fpdf2",
+]
+
+[tool.briefcase.app.attendanceapp.ios]
+# متطلبات خاصة بنظام iOS
+frameworks = []
