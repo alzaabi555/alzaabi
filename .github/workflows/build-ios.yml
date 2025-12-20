@@ -1,46 +1,38 @@
-build-ios:
+name: بناء تطبيق iOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
     runs-on: macos-latest
     env:
       APP_NAME: "StudentBehavior"
       
     steps:
-      # 1. تحميل كود المشروع من GitHub
       - name: 📥 تحميل المشروع
         uses: actions/checkout@v4
       
-      # 2. إعداد بيئة Python
       - name: 🐍 إعداد Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       
-      # 3. تثبيت مكتبات Python المطلوبة
       - name: 📦 تثبيت المكتبات
         run: |
           pip install 'flet[cli]' --upgrade
           pip install -r requirements.txt
       
-      # 4. إعداد بيئة Flutter
       - name: 🚀 إعداد Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.22.0'
           channel: 'stable'
       
-      # 5. الخطوة الأساسية: إنشاء هيكل مشروع Flet باستخدام القالب 'minimal'
-      - name: 🔧 إنشاء مشروع Flet
-        run: |
-          flet create "$APP_NAME" --template minimal
-          cp main.py "$APP_NAME"/
-          cp requirements.txt "$APP_NAME"/
-          cd "$APP_NAME"
-      
-      # 6. بناء ملف IPA لتطبيق iOS
       - name: 🔨 بناء تطبيق iOS
         run: |
           flet build ipa --project "$APP_NAME" --org "com.education" --verbose
       
-      # 7. تجميع ملف IPA إذا لم يتم العثور عليه تلقائيًا (خطوة احتياطية)
       - name: 📦 تجميع IPA يدويًا
         run: |
           APP_BUNDLE=$(find . -name "*.app" -type d | head -n1)
@@ -50,7 +42,6 @@ build-ios:
             zip -qr "$APP_NAME.ipa" Payload
           fi
       
-      # 8. رفع ملف IPA الناتج كمرفق (Artifact) في GitHub
       - name: ⬆️ رفع التطبيق النهائي
         uses: actions/upload-artifact@v4
         with:
