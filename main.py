@@ -4,6 +4,7 @@ import csv
 import datetime
 import json
 import os
+from typing import Dict, List, Optional
 
 # --- إعدادات ثابتة ---
 POSITIVE_BEHAVIORS = ["مشاركة فعالة", "حل الواجب", "احترام المعلم", "نظافة", "تعاون", "إجابة ذكية"]
@@ -18,39 +19,32 @@ class SchoolApp:
         self.backup_file = "school_backup.json"
 
     def main(self, page: ft.Page):
-        # إعدادات الصفحة
+        # ==============================================
+        # 1. إعدادات التطبيق الأساسية
+        # ==============================================
         page.title = "ضبط سلوكيات الطلبة"
         page.rtl = True
         page.theme_mode = ft.ThemeMode.LIGHT
         page.scroll = None
         page.bgcolor = "#f5f5f7"
-        page.fonts = {"Arabic": "fonts/NotoNaskhArabic-Regular.ttf"}
-        page.theme = ft.Theme(font_family="Arabic")
-
-        # --- إدارة البيانات ---
-        def load_data():
-            try:
-                data = page.client_storage.get("school_db")
-                if isinstance(data, dict):
-                    self.school_data = data
-                else:
-                    self.school_data = {}
-            except:
-                self.school_data = {}
-
-        def save_data():
-            page.client_storage.set("school_db", self.school_data)
-
-        load_data()
-
-        # --- عناصر الواجهة ---
+        
+        # إعدادات الخطوط المبسطة (ستستخدم الخطوط المدمجة في iOS)
+        page.fonts = {
+            "system": "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'Segoe UI', sans-serif"
+        }
+        page.theme = ft.Theme(font_family="system")
+        
+        # ==============================================
+        # 2. حقول الإدخال
+        # ==============================================
         txt_class_name = ft.TextField(
             hint_text="اسم الفصل",
             bgcolor="white",
             border_radius=10,
             expand=True,
             filled=True,
-            border_color="indigo"
+            border_color="indigo",
+            text_align=ft.TextAlign.RIGHT
         )
         
         txt_student_name = ft.TextField(
@@ -59,12 +53,15 @@ class SchoolApp:
             border_radius=10,
             expand=True,
             filled=True,
-            border_color="indigo"
+            border_color="indigo",
+            text_align=ft.TextAlign.RIGHT
         )
         
-        # زر التاريخ
+        # ==============================================
+        # 3. زر التاريخ
+        # ==============================================
         date_button = ft.ElevatedButton(
-            text=f"📅 تاريخ اليوم: {self.selected_date}",
+            text=f"📅 {self.selected_date}",
             bgcolor="indigo",
             color="white",
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
@@ -83,12 +80,14 @@ class SchoolApp:
         def change_date(e):
             if e.control.value:
                 self.selected_date = e.control.value.strftime("%Y-%m-%d")
-                date_button.text = f"📅 التاريخ: {self.selected_date}"
+                date_button.text = f"📅 {self.selected_date}"
                 if self.current_class:
                     show_students_view(None)
                 page.update()
 
-        # --- استيراد الملفات ---
+        # ==============================================
+        # 4. استيراد الملفات
+        # ==============================================
         file_picker = ft.FilePicker()
         page.overlay.append(file_picker)
 
@@ -100,14 +99,12 @@ class SchoolApp:
                 file_path = e.files[0].path
                 raw_rows = []
                 
-                # معالجة Excel
                 if e.files[0].name.endswith(('xlsx', 'xls')):
                     wb = openpyxl.load_workbook(file_path, data_only=True)
                     sheet = wb.active
                     for row in sheet.iter_rows(values_only=True):
                         raw_rows.append([str(c) if c else "" for c in row])
                 
-                # معالجة CSV
                 elif e.files[0].name.endswith('.csv'):
                     encodings_to_try = ['utf-8-sig', 'cp1256', 'windows-1256', 'iso-8859-6', 'utf-8']
                     
@@ -122,7 +119,6 @@ class SchoolApp:
                         except:
                             continue
 
-                # إضافة الأسماء
                 count = 0
                 current_students = self.school_data[self.current_class]
                 existing_names = {s['name'] for s in current_students}
@@ -145,38 +141,148 @@ class SchoolApp:
                 
                 save_data()
                 show_students_view(None)
-                page.snack_bar = ft.SnackBar(ft.Text(f"✅ تم استيراد {count} اسم بنجاح"), bgcolor="green")
+                page.snack_bar = ft.SnackBar(
+                    ft.Text(f"✅ تم استيراد {count} اسم"), 
+                    bgcolor="green"
+                )
                 page.snack_bar.open = True
                 page.update()
 
             except Exception as ex:
-                page.snack_bar = ft.SnackBar(ft.Text(f"❌ حدث خطأ: {ex}"), bgcolor="red")
+                page.snack_bar = ft.SnackBar(
+                    ft.Text(f"❌ خطأ: {ex}"), 
+                    bgcolor="red"
+                )
                 page.snack_bar.open = True
                 page.update()
 
         file_picker.on_result = on_file_picked
 
-        # --- تصدير البيانات ---
+        # ==============================================
+        # 5. تصدير البيانات
+        # ==============================================
         def export_data(e):
             if not self.current_class:
                 return
                 
             students = self.school_data[self.current_class]
-            output = "الاسم\tالنقاط\tأيام الغياب\n"
+            output = "الاسم\tالنقاط\tالغياب\n"
             for s in students:
                 absent_count = list(s.get('attendance', {}).values()).count('absent')
                 output += f"{s['name']}\t{s['score']}\t{absent_count}\n"
             
             page.set_clipboard(output)
-            page.snack_bar = ft.SnackBar(ft.Text("📋 تم نسخ البيانات! ألصقها في Excel"), bgcolor="blue")
+            page.snack_bar = ft.SnackBar(
+                ft.Text("📋 تم نسخ البيانات"), 
+                bgcolor="blue"
+            )
             page.snack_bar.open = True
             page.update()
 
-        # --- التنقل ---
+        # ==============================================
+        # 6. إدارة البيانات
+        # ==============================================
+        def load_data():
+            try:
+                data = page.client_storage.get("school_db")
+                if isinstance(data, dict):
+                    self.school_data = data
+                else:
+                    self.school_data = {}
+            except:
+                self.school_data = {}
+
+        def save_data():
+            page.client_storage.set("school_db", self.school_data)
+
+        load_data()
+
+        # ==============================================
+        # 7. صفحة تفاصيل الطالب
+        # ==============================================
+        def show_student_details(student):
+            attendance_log = student.get('attendance', {})
+            absent_days = [d for d, status in attendance_log.items() if status == 'absent']
+            history = student.get('history', [])
+            
+            behavior_list = ft.ListView(expand=True, spacing=5)
+            if not history:
+                behavior_list.controls.append(
+                    ft.Text("لا يوجد سجل", color="grey", text_align=ft.TextAlign.CENTER)
+                )
+            else:
+                for record in reversed(history):
+                    icon = ft.icons.THUMB_UP if record['type'] == 'pos' else ft.icons.THUMB_DOWN
+                    color = "green" if record['type'] == 'pos' else "red"
+                    behavior_list.controls.append(
+                        ft.ListTile(
+                            leading=ft.Icon(icon, color=color),
+                            title=ft.Text(record['note'], weight="bold"),
+                            subtitle=ft.Text(record['date'], size=12, color="grey")
+                        )
+                    )
+
+            absent_list = ft.ListView(expand=True, spacing=5)
+            if not absent_days:
+                absent_list.controls.append(
+                    ft.Text("الطالب منتظم", color="green", text_align=ft.TextAlign.CENTER)
+                )
+            else:
+                for day in sorted(absent_days, reverse=True):
+                    absent_list.controls.append(
+                        ft.ListTile(
+                            leading=ft.Icon(ft.icons.EVENT_BUSY, color="red"),
+                            title=ft.Text(f"غائب يوم: {day}")
+                        )
+                    )
+
+            page.views.append(
+                ft.View(
+                    "/student_details",
+                    [
+                        ft.AppBar(
+                            title=ft.Text(student['name']),
+                            bgcolor="indigo",
+                            color="white",
+                            leading=ft.IconButton(
+                                ft.icons.ARROW_BACK,
+                                on_click=lambda _: page.go("/class")
+                            )
+                        ),
+                        ft.Container(
+                            padding=20,
+                            content=ft.Row([
+                                ft.Column([
+                                    ft.Text("النقاط", color="grey"), 
+                                    ft.Text(str(student['score']), size=30, weight="bold", color="blue")
+                                ], alignment=ft.MainAxisAlignment.CENTER),
+                                ft.Container(width=20),
+                                ft.Column([
+                                    ft.Text("الغياب", color="grey"), 
+                                    ft.Text(str(len(absent_days)), size=30, weight="bold", color="red")
+                                ], alignment=ft.MainAxisAlignment.CENTER),
+                            ], alignment=ft.MainAxisAlignment.CENTER)
+                        ),
+                        ft.Tabs(
+                            selected_index=0,
+                            tabs=[
+                                ft.Tab(text="السلوك", content=ft.Container(content=behavior_list, padding=10)),
+                                ft.Tab(text="الغياب", content=ft.Container(content=absent_list, padding=10)),
+                            ],
+                            expand=True
+                        )
+                    ],
+                    bgcolor="white"
+                )
+            )
+            page.update()
+
+        # ==============================================
+        # 8. التنقل الرئيسي
+        # ==============================================
         def route_change(route):
             page.views.clear()
             
-            # الصفحة الرئيسية
             if page.route == "/":
                 def add_class(e):
                     if txt_class_name.value and txt_class_name.value not in self.school_data:
@@ -199,7 +305,6 @@ class SchoolApp:
                     save_data()
                     route_change(None)
 
-                # قائمة الفصول
                 classes_list = ft.ListView(expand=True, spacing=10, padding=15)
                 for name in self.school_data:
                     count = len(self.school_data[name])
@@ -209,7 +314,7 @@ class SchoolApp:
                             content=ft.ListTile(
                                 leading=ft.Icon(ft.icons.CLASS_, color="indigo"),
                                 title=ft.Text(name, weight="bold"),
-                                subtitle=ft.Text(f"👥 {count} طالب"),
+                                subtitle=ft.Text(f"{count} طالب"),
                                 trailing=ft.IconButton(
                                     ft.icons.DELETE,
                                     icon_color="red",
@@ -225,26 +330,18 @@ class SchoolApp:
                         "/",
                         [
                             ft.AppBar(
-                                title=ft.Text("🏫 ضبط سلوكيات الطلبة"),
+                                title=ft.Text("ضبط السلوكيات"),
                                 bgcolor="indigo",
                                 color="white",
                                 leading=ft.IconButton(
-                                    ft.icons.INFO_OUTLINE,
-                                    tooltip="معلومات",
-                                    on_click=lambda _: show_info_dialog()
-                                ),
-                                actions=[
-                                    ft.IconButton(
-                                        ft.icons.DELETE_FOREVER,
-                                        tooltip="حذف الكل",
-                                        on_click=clear_all
-                                    )
-                                ]
+                                    ft.icons.MENU,
+                                    on_click=lambda e: page.snack_bar
+                                )
                             ),
                             ft.Container(
                                 padding=20,
                                 content=ft.Column([
-                                    ft.Text("➕ إضافة فصل جديد", size=20, weight="bold", color="indigo"),
+                                    ft.Text("إضافة فصل جديد", size=20, weight="bold", color="indigo"),
                                     ft.Row([
                                         txt_class_name,
                                         ft.FloatingActionButton(
@@ -259,7 +356,7 @@ class SchoolApp:
                             ft.Container(
                                 padding=10,
                                 content=ft.Column([
-                                    ft.Text("📚 الفصول المتاحة", size=18, weight="bold", color="indigo"),
+                                    ft.Text("الفصول المتاحة", size=18, weight="bold", color="indigo"),
                                     classes_list
                                 ])
                             )
@@ -268,7 +365,6 @@ class SchoolApp:
                     )
                 )
 
-            # صفحة الفصل
             elif page.route == "/class":
                 students = self.school_data.get(self.current_class, [])
 
@@ -332,8 +428,8 @@ class SchoolApp:
                     tabs = ft.Tabs(
                         selected_index=0,
                         tabs=[
-                            ft.Tab(text="👍 إيجابي", content=ft.Container(content=pos_col, height=300)),
-                            ft.Tab(text="👎 سلبي", content=ft.Container(content=neg_col, height=300))
+                            ft.Tab(text="إيجابي", content=ft.Container(content=pos_col, height=300)),
+                            ft.Tab(text="سلبي", content=ft.Container(content=neg_col, height=300))
                         ]
                     )
                     
@@ -344,81 +440,6 @@ class SchoolApp:
                     page.dialog.open = True
                     page.update()
 
-                def show_student_details(student):
-                    attendance_log = student.get('attendance', {})
-                    absent_days = [d for d, status in attendance_log.items() if status == 'absent']
-                    history = student.get('history', [])
-                    
-                    # علامات التبويب
-                    behavior_list = ft.ListView(expand=True, spacing=5)
-                    if not history:
-                        behavior_list.controls.append(ft.Text("لا يوجد سجل سلوكيات", color="grey", text_align="center"))
-                    else:
-                        for record in reversed(history):
-                            icon = ft.icons.THUMB_UP if record['type'] == 'pos' else ft.icons.THUMB_DOWN
-                            color = "green" if record['type'] == 'pos' else "red"
-                            behavior_list.controls.append(
-                                ft.ListTile(
-                                    leading=ft.Icon(icon, color=color),
-                                    title=ft.Text(record['note'], weight="bold"),
-                                    subtitle=ft.Text(record['date'], size=12, color="grey")
-                                )
-                            )
-
-                    absent_list = ft.ListView(expand=True, spacing=5)
-                    if not absent_days:
-                        absent_list.controls.append(ft.Text("الطالب منتظم", color="green", text_align="center"))
-                    else:
-                        for day in sorted(absent_days, reverse=True):
-                            absent_list.controls.append(
-                                ft.ListTile(
-                                    leading=ft.Icon(ft.icons.EVENT_BUSY, color="red"),
-                                    title=ft.Text(f"غائب يوم: {day}")
-                                )
-                            )
-
-                    page.views.append(
-                        ft.View(
-                            "/student_details",
-                            [
-                                ft.AppBar(
-                                    title=ft.Text(student['name']),
-                                    bgcolor="indigo",
-                                    color="white",
-                                    leading=ft.IconButton(
-                                        ft.icons.ARROW_BACK,
-                                        on_click=lambda _: page.go("/class")
-                                    )
-                                ),
-                                ft.Container(
-                                    padding=20,
-                                    content=ft.Row([
-                                        ft.Column([
-                                            ft.Text("النقاط", color="grey"),
-                                            ft.Text(str(student['score']), size=30, weight="bold", color="blue")
-                                        ], alignment="center"),
-                                        ft.Container(width=20),
-                                        ft.Column([
-                                            ft.Text("الغياب", color="grey"),
-                                            ft.Text(str(len(absent_days)), size=30, weight="bold", color="red")
-                                        ], alignment="center"),
-                                    ], alignment=ft.MainAxisAlignment.CENTER)
-                                ),
-                                ft.Tabs(
-                                    selected_index=0,
-                                    tabs=[
-                                        ft.Tab(text="📋 السلوك", content=ft.Container(content=behavior_list, padding=10)),
-                                        ft.Tab(text="📅 الغياب", content=ft.Container(content=absent_list, padding=10)),
-                                    ],
-                                    expand=True
-                                )
-                            ],
-                            bgcolor="white"
-                        )
-                    )
-                    page.update()
-
-                # قائمة الطلاب
                 students_lv = ft.ListView(expand=True, spacing=5, padding=10)
                 
                 for student in students:
@@ -436,22 +457,19 @@ class SchoolApp:
                                 leading=ft.IconButton(
                                     icon=att_icon,
                                     icon_color=att_color,
-                                    tooltip="تغيير الحضور",
                                     on_click=lambda e, stu=student: toggle_attendance(stu)
                                 ),
                                 title=ft.Text(student['name'], weight="bold"),
-                                subtitle=ft.Text(f"⭐ النقاط: {student['score']}", color="blue"),
+                                subtitle=ft.Text(f"النقاط: {student['score']}", color="blue"),
                                 trailing=ft.Row([
                                     ft.IconButton(
                                         ft.icons.ADD_COMMENT,
                                         icon_color="orange",
-                                        tooltip="إضافة سلوك",
                                         on_click=lambda e, stu=student: open_behavior_dialog(stu)
                                     ),
                                     ft.IconButton(
                                         ft.icons.INFO,
                                         icon_color="purple",
-                                        tooltip="تفاصيل",
                                         on_click=lambda e, stu=student: show_student_details(stu)
                                     )
                                 ], spacing=5)
@@ -464,7 +482,7 @@ class SchoolApp:
                         "/class",
                         [
                             ft.AppBar(
-                                title=ft.Text(f"🎒 {self.current_class}"),
+                                title=ft.Text(self.current_class),
                                 bgcolor="indigo",
                                 color="white",
                                 leading=ft.IconButton(
@@ -474,12 +492,10 @@ class SchoolApp:
                                 actions=[
                                     ft.IconButton(
                                         ft.icons.COPY,
-                                        tooltip="تصدير البيانات",
                                         on_click=export_data
                                     ),
                                     ft.IconButton(
                                         ft.icons.UPLOAD_FILE,
-                                        tooltip="استيراد أسماء",
                                         on_click=lambda _: file_picker.pick_files()
                                     )
                                 ]
@@ -489,7 +505,7 @@ class SchoolApp:
                                 content=ft.Column([
                                     date_button,
                                     ft.Divider(),
-                                    ft.Text("➕ إضافة طالب جديد", size=18, weight="bold", color="indigo"),
+                                    ft.Text("إضافة طالب جديد", size=18, weight="bold", color="indigo"),
                                     ft.Row([
                                         txt_student_name,
                                         ft.FloatingActionButton(
@@ -504,7 +520,7 @@ class SchoolApp:
                             ft.Container(
                                 padding=10,
                                 content=ft.Column([
-                                    ft.Text("👥 قائمة الطلاب", size=18, weight="bold", color="indigo"),
+                                    ft.Text("قائمة الطلاب", size=18, weight="bold", color="indigo"),
                                     students_lv
                                 ])
                             )
@@ -518,47 +534,9 @@ class SchoolApp:
         def show_students_view(_):
             route_change(None)
 
-        def show_info_dialog():
-            dlg = ft.AlertDialog(
-                title=ft.Text("ℹ️ معلومات التطبيق", weight="bold"),
-                content=ft.Column([
-                    ft.Container(
-                        padding=10,
-                        bgcolor=ft.colors.BLUE_50,
-                        border_radius=10,
-                        content=ft.Column([
-                            ft.ListTile(
-                                leading=ft.Icon(ft.icons.PERSON, color="indigo"),
-                                title=ft.Text("👨‍🏫 المعلم"),
-                                subtitle=ft.Text("محمد درويش الزعابي", color="black", weight="bold")
-                            ),
-                            ft.Divider(),
-                            ft.ListTile(
-                                leading=ft.Icon(ft.icons.SCHOOL, color="indigo"),
-                                title=ft.Text("🏫 المدرسة"),
-                                subtitle=ft.Text("الإبداع للبنين", color="black", weight="bold")
-                            ),
-                            ft.Divider(),
-                            ft.ListTile(
-                                leading=ft.Icon(ft.icons.APP_REGISTRATION, color="indigo"),
-                                title=ft.Text("📱 التطبيق"),
-                                subtitle=ft.Text("ضبط سلوكيات الطلبة v1.0", color="green", weight="bold")
-                            )
-                        ])
-                    )
-                ], tight=True),
-                actions=[
-                    ft.TextButton("إغلاق", on_click=lambda e: page.close_dialog())
-                ]
-            )
-            page.dialog = dlg
-            dlg.open = True
-            page.update()
-
-        # إعداد التنقل
         page.on_route_change = route_change
         page.go("/")
 
 if __name__ == "__main__":
     app = SchoolApp()
-    ft.app(target=app.main, view=ft.WEB_BROWSER)
+    ft.app(target=app.main)
