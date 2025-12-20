@@ -1,85 +1,58 @@
-name: Build Student Behavior App
-
-on:
-  workflow_dispatch:
-
-jobs:
-  build-ios:
+build-ios:
     runs-on: macos-latest
-    
-    steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v3
+    env:
+      APP_NAME: "StudentBehavior"
       
-    - name: 🐍 Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        
-    - name: 📦 Install Python packages
-      run: |
-        pip install flet==0.22.1
-        pip install openpyxl==3.1.2
-        pip install et-xmlfile==1.1.0
-        
-    - name: 🚀 Setup Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.22.0'
-        
-    - name: 🔨 Build Flet iOS App
-      run: |
-        # أولاً: إنشاء تطبيق Flet
-        flet create "StudentBehaviorApp" --template app
-        
-        # ثانياً: نسخ ملفاتنا للتطبيق
-        cp main.py StudentBehaviorApp/
-        cp requirements.txt StudentBehaviorApp/
-        
-        # ثالثاً: الدخول للمجلد والبناء
-        cd StudentBehaviorApp
-        
-        # رابعاً: بناء IPA (بدون إعدادات اللغة القديمة)
-        flet build ipa --project "StudentBehavior" --org "com.education"
-        
-    - name: 📱 Fix iOS Issues
-      run: |
-        cd StudentBehaviorApp
-        
-        # إصلاح الشاشة البيضاء
-        find . -name "Info.plist" -type f | while read PLIST; do
-          # تعطيل Impeller
-          /usr/libexec/PlistBuddy -c "Delete :FLTEnableImpeller" "$PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :FLTEnableImpeller bool false" "$PLIST"
-          
-          # إضافة إعدادات اللغة
-          /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string 'ar'" "$PLIST" 2>/dev/null || true
-          
-          echo "✅ Fixed: $PLIST"
-        done
-        
-    - name: 📦 Package IPA
-      run: |
-        cd StudentBehaviorApp
-        
-        # البحث عن IPA المولد
-        if [ -f "build/ios/ipa/*.ipa" ]; then
-          cp build/ios/ipa/*.ipa ../StudentBehavior.ipa
-        else
-          # إنشاء IPA يدوياً إذا فشل البناء
-          APP_PATH=$(find . -name "Runner.app" -type d | head -1)
-          if [ -n "$APP_PATH" ]; then
+    steps:
+      # 1. تحميل كود المشروع من GitHub
+      - name: 📥 تحميل المشروع
+        uses: actions/checkout@v4
+      
+      # 2. إعداد بيئة Python
+      - name: 🐍 إعداد Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      # 3. تثبيت مكتبات Python المطلوبة
+      - name: 📦 تثبيت المكتبات
+        run: |
+          pip install 'flet[cli]' --upgrade
+          pip install -r requirements.txt
+      
+      # 4. إعداد بيئة Flutter
+      - name: 🚀 إعداد Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: 'stable'
+      
+      # 5. الخطوة الأساسية: إنشاء هيكل مشروع Flet باستخدام القالب 'minimal'
+      - name: 🔧 إنشاء مشروع Flet
+        run: |
+          flet create "$APP_NAME" --template minimal
+          cp main.py "$APP_NAME"/
+          cp requirements.txt "$APP_NAME"/
+          cd "$APP_NAME"
+      
+      # 6. بناء ملف IPA لتطبيق iOS
+      - name: 🔨 بناء تطبيق iOS
+        run: |
+          flet build ipa --project "$APP_NAME" --org "com.education" --verbose
+      
+      # 7. تجميع ملف IPA إذا لم يتم العثور عليه تلقائيًا (خطوة احتياطية)
+      - name: 📦 تجميع IPA يدويًا
+        run: |
+          APP_BUNDLE=$(find . -name "*.app" -type d | head -n1)
+          if [ -n "$APP_BUNDLE" ]; then
             mkdir -p Payload
-            cp -r "$APP_PATH" Payload/
-            zip -qr ../StudentBehavior.ipa Payload
+            cp -r "$APP_BUNDLE" Payload/
+            zip -qr "$APP_NAME.ipa" Payload
           fi
-        fi
-        
-    - name: ⬆️ Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: iOS-App
-        path: |
-          StudentBehavior.ipa
-          StudentBehaviorApp/build/ios/ipa/*.ipa
-        retention-days: 7
+      
+      # 8. رفع ملف IPA الناتج كمرفق (Artifact) في GitHub
+      - name: ⬆️ رفع التطبيق النهائي
+        uses: actions/upload-artifact@v4
+        with:
+          name: تطبيق-iOS
+          path: "*.ipa"
