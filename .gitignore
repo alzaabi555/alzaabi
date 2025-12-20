@@ -1,44 +1,13 @@
-# Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Flet/Flutter
 build/
 dist/
 *.egg-info/
 *.egg
-
-# iOS/Flutter
-ios/Pods/
-ios/.symlinks/
-ios/Flutter/Flutter.framework
-ios/Flutter/App.framework
 *.ipa
 Payload/
 .DS_Store
-
-# بيانات التطبيق
 school_backup.json
 *.db
-*.sqlite
-
-# IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# نظام التشغيل
-Thumbs.db
-ehthumbs.db
-Desktop.ini
