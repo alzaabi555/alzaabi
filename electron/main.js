@@ -1,7 +1,7 @@
-const { app, BrowserWindow, shell, Menu } = require('electron');
+const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
 
-// إيقاف التسريع المادي إذا لزم الأمر لحل مشاكل العرض في بعض الأجهزة
+// إيقاف التسريع المادي قد يحل بعض مشاكل العرض في كروت شاشة معينة
 // app.disableHardwareAcceleration();
 
 let mainWindow;
@@ -17,26 +17,37 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      devTools: false // تغيير إلى true إذا كنت تريد أدوات المطور
+      devTools: false, // اجعلها true إذا كنت بحاجة لفحص الأخطاء
+      sandbox: false 
     }
   });
 
-  // مسح الكاش عند بدء التشغيل لضمان تحميل أحدث نسخة من ملفات التطبيق
+  // مسح الكاش لضمان تحميل التحديثات الجديدة في الواجهة
   mainWindow.webContents.session.clearCache().then(() => {
      console.log('Cache cleared successfully');
   });
 
-  // تحميل ملفات التطبيق المبنية (نفس الملفات التي يستخدمها الموبايل)
   mainWindow.loadFile(path.join(__dirname, '../www/index.html'));
-
-  // إخفاء القائمة العلوية الافتراضية للحصول على مظهر تطبيق أنظف
   mainWindow.setMenuBarVisibility(false);
 
-  // التعامل مع الروابط الخارجية (مثل البوابة التعليمية ومنصة نور)
-  // هذا يضمن فتح الروابط في المتصفح الافتراضي للكمبيوتر (Chrome/Edge) بدلاً من نافذة داخل التطبيق
+  // التعامل مع فتح الروابط الخارجية (واتساب، مواقع، الخ)
+  // هذا الجزء ضروري جداً لنسخة الويندوز لفتح الروابط في المتصفح الافتراضي
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    // السماح بفتح البروتوكولات الخارجية المعروفة
+    if (url.startsWith('https:') || url.startsWith('http:') || url.startsWith('mailto:') || url.startsWith('tel:') || url.startsWith('sms:') || url.startsWith('whatsapp:')) {
+      shell.openExternal(url).catch(err => console.error('Failed to open external url:', err));
+    }
+    // منع إنشاء نافذة Electron فرعية، والاكتفاء بفتح الرابط خارجياً
     return { action: 'deny' };
+  });
+
+  // حماية إضافية لمنع التنقل داخل النافذة الرئيسية إلى مواقع خارجية عن طريق الخطأ
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const isLocal = url.startsWith('file://');
+    if (!isLocal) {
+        event.preventDefault();
+        shell.openExternal(url);
+    }
   });
 
   mainWindow.on('closed', () => {
